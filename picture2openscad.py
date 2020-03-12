@@ -5,6 +5,9 @@ Maintained by Jerry Jia <mailto:jiazhen.thinpig@gmail.com>
 This is a class that will be used for OpenSCAD 3D object code generation from a 2D picture.
 It will support different function for some quick 3D modelling from 2D object.
 
+v1.2 (03/12/2020) changes from v1.1
+- support color picture import and color cube
+
 v1.1 (03/12/2020) changes from v1.0
 - optimize func return
 - separate output file into func ExportScad()
@@ -90,12 +93,13 @@ class picture2openscad(object):
         
         return
 
-    def ImportPicture(self,picture_filename, picture_gray_invert=True, picture_flip= "NONE",picture_norm_type="NORM_MINMAX" ):
+    def ImportPicture(self,picture_filename, picture_color_space="GRAY",picture_color_invert=True, picture_flip= "NONE",picture_norm_type="NORM_MINMAX" ):
         """This function will import image from picture_filename, support common picture format.
 
         Keyword Arguments:
             picture filename
-            picture_gray_invert , invert gray, default True
+            picture_color_space , color space of picture, default "GRAY", can be "BGR"
+            picture_color_invert , invert gray, default True
             picture_flip = NONE , do picture flip default NONE disable, set to VERT -> vertical, HORI -> horizontal, VERT_HORI -> vertical and horizontal
             picture_norm_type="NORM_MINMAX" , do picture normalization default NORM_MINMAX, NORM_INF, NORM_L1, NORM_L2
 
@@ -120,7 +124,8 @@ class picture2openscad(object):
         ScaleInputPicture_shape = im.shape
         
         # picture color space convert
-        if len(ScaleInputPicture_shape)==3: im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+        if len(ScaleInputPicture_shape)==3 and picture_color_space == "GRAY": 
+            if ScaleInputPicture_shape[2]==3: im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
 
         # flip
         if picture_flip == "VERT": im = cv2.flip(im,0) # flip
@@ -128,7 +133,7 @@ class picture2openscad(object):
         if picture_flip == "VERT_HORI": im = cv2.flip(im,-1) # flip
 
         # invert
-        if picture_gray_invert: im = abs(im-255) # gray invert
+        if picture_color_invert: im = abs(im-255) # gray invert
 
         im = np.float32(im)
 
@@ -159,7 +164,7 @@ class picture2openscad(object):
         return im
 
 
-    def PixelCubeZDepth(self, im_src, offset=[0,0,0], translate = [1,1,0], pixelcube = [.2,.2,.2], zdepth = 5, exclude_threshold = 0, color_mode="GRAY"):
+    def PixelCubeZDepth(self, im_src, offset=[0,0,0], translate = [1,1,0], pixelcube = [.2,.2,.2], zdepth = 5, exclude_threshold = [0], color_mode="GRAY", color_alpha=1):
         """This function will create cube based image from ImportPicture()
         Keyword Arguments:
             im_src
@@ -167,30 +172,65 @@ class picture2openscad(object):
             translate = [1,1,0]      ,final pixel cube scale, z=0 means cube z will depends on ZDepth, otherwise z location will be controlled by picture color
             pixelcube = [.2,.2,.2]   ,pixel cube size
             zdepth = 5               ,zdepth will control cube z length, zdepth=0 meas cube z depth will not controlled by picture color
-            exclude_threshold = 0    ,color excluded to build cube, default is 0
+            exclude_threshold = [0,0,0]    ,color excluded to build cube, default is 0
             color_mode="GRAY"        ,color mode, GRAY means will color cube based on picture color
             
 
         Output: self.scad_script_content {list}
         """
         pixel_index = 0
+        Y = 0
+        #print(np.array(im_src[100][150]))
         for y in range(0,im_src.shape[0]):
             for x in range(0,im_src.shape[1]):
-                if im_src[y][x] != exclude_threshold:  # exclude_threshold
+                if not np.array_equal(np.array(im_src[y][x]),np.array(exclude_threshold)):  # exclude_threshold
                     if color_mode == "GRAY": 
-                        r=im_src[y][x]
-                        g=im_src[y][x]
-                        b=im_src[y][x]
-                        a=1.0
-                        scad_script_color = "color( c = ["+str(r)+","+str(g)+","+str(b)+","+str(a)+"])"
+                        if len(im_src.shape)==3: 
+                            if im_src.shape[2]==3: 
+                                Y=0.299 * im_src[y][x][2] + 0.587 * im_src[y][x][1] + 0.114 * im_src[y][x][0]
+                                r,g,b=Y,Y,Y
+                                a=color_alpha
+                            if im_src.shape[2]==1:
+                                Y=im_src[y][x]
+                                r,g,b=Y,Y,Y
+                                a=color_alpha
+                        if len(im_src.shape)==2: 
+                            Y=im_src[y][x]
+                            r,g,b=Y,Y,Y
+                            a=color_alpha
+                        scad_script_color = "color( c = ["+str(abs(r))+","+str(abs(g))+","+str(abs(b))+","+str(abs(a))+"])"
                         self.scad_script_content.append(scad_script_color)
+                    if color_mode == "BGR":
+                        if len(im_src.shape)==3: 
+                            if im_src.shape[2]==3: 
+                                Y=0.299 * im_src[y][x][2] + 0.587 * im_src[y][x][1] + 0.114 * im_src[y][x][0]
+                                b,g,r=im_src[y][x]
+                                a=color_alpha
+                            if im_src.shape[2]==1:
+                                Y=im_src[y][x]
+                                r,g,b=Y,Y,Y
+                                a=color_alpha
+                        if len(im_src.shape)==2: 
+                            Y=im_src[y][x]
+                            r,g,b=Y,Y,Y
+                            a=color_alpha
+                        scad_script_color = "color( c = ["+str(abs(r))+","+str(abs(g))+","+str(abs(b))+","+str(abs(a))+"])"
+                        self.scad_script_content.append(scad_script_color)
+                    if color_mode == "BGRA":
+                        if len(im_src.shape)==3: 
+                            if im_src.shape[2]==4:
+                                Y=0.299 * im_src[y][x][2] + 0.587 * im_src[y][x][1] + 0.114 * im_src[y][x][0]
+                                b,g,r,a=im_src[y][x]
+                        scad_script_color = "color( c = ["+str(abs(r))+","+str(abs(g))+","+str(abs(b))+","+str(abs(a))+"])"
+                        self.scad_script_content.append(scad_script_color)
+
                     translate_x = x * translate[0] + offset[0]
                     translate_y = y * translate[1] + offset[1]
-                    translate_z = (1-im_src[y][x])*translate[2] + offset[2]
+                    translate_z = (1-Y)*translate[2] + offset[2]
                     cube_x = pixelcube[0]
                     cube_y = pixelcube[1]
                     if zdepth == 0: cube_z = pixelcube[2]
-                    else: cube_z = pixelcube[2]*(1-im_src[y][x]) * zdepth
+                    else: cube_z = pixelcube[2]*(1-Y) * zdepth
 
                     scad_script_translate = "translate([" + str(translate_x) + "," + str(translate_y) + ","+str(translate_z)+"])"
                     self.scad_script_content.append(scad_script_translate)
