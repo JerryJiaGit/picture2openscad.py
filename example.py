@@ -16,7 +16,7 @@ v1.0 (03/11/2020) changes from initial release
 import picture2openscad
 
 debug_mode = False
-picture_filename = "example//3352071944.jpg"
+picture_filename = "example//HydrogenOrbitalsN6L0M0.png"
 scad_filename = "output.scad"
 
 
